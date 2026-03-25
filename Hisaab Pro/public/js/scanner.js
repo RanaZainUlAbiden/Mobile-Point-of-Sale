@@ -58,13 +58,31 @@ const SCANNER = {
   stopCamera() {
     if (this.running) {
       try { Quagga.stop(); } catch(e) {}
+      try { Quagga.offDetected(); } catch(e) {}
       this.running = false;
     }
+    // Stop all video tracks
+    try {
+      const videos = document.querySelectorAll('#scanner-top video');
+      videos.forEach(v => {
+        if (v.srcObject) {
+          v.srcObject.getTracks().forEach(t => t.stop());
+          v.srcObject = null;
+        }
+        v.remove();
+      });
+    } catch(e) {}
+    // Remove quagga canvas
+    try {
+      const canvases = document.querySelectorAll('#scanner-top canvas');
+      canvases.forEach(c => c.remove());
+    } catch(e) {}
     if (this.torchTrack) {
       try { this.torchTrack.stop(); } catch(e) {}
       this.torchTrack = null;
     }
     this.torchOn = false;
+    this.running = false;
   },
 
   // ── BARCODE SCANNING ─────────────────────────────────────────────────────
