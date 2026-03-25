@@ -29,10 +29,10 @@
     <div class="act-footer">
       Contact DevInfantary to get your activation code.<br>
       Each code is locked to your device only.<br><br>
-      <a href="https://wa.me/923324645962"
-        style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;text-decoration:none;padding:10px 20px;border-radius:10px;font-weight:700;font-size:13px;">
-        Contact on WhatsApp
-      </a>
+      <button onclick="contactOnWhatsApp()"
+  style="display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;border:none;padding:10px 20px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;">
+  📲 Contact on WhatsApp
+</button>
     </div>
     <div class="devinfantary-tag">Powered by <span>DevInfantary</span></div>
   </div>
@@ -302,16 +302,7 @@
 
     <div style="position:absolute;top:0;left:0;right:0;padding:40px 16px 16px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(rgba(0,0,0,0.6),transparent);z-index:12;">
       <button class="scanner-btn" onclick="closeScanner()">X</button>
-      <div style="display:flex;gap:6px;">
-        <button id="btn-mode-barcode" onclick="setScanMode('barcode')"
-          style="background:#1E3A5F;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">
-          Barcode
-        </button>
-        <button id="btn-mode-ocr" onclick="setScanMode('ocr')"
-          style="background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;">
-          OCR Text
-        </button>
-      </div>
+      <div style="font-size:13px;font-weight:600;color:#fff;" id="scanner-mode-title">Scanning...</div>
       <button class="scanner-btn" id="torch-btn" onclick="toggleTorch()">Flash</button>
     </div>
 

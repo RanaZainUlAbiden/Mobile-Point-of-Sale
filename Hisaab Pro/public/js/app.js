@@ -12,7 +12,7 @@ const APP = {
     if (status === 'inactive') {
       document.getElementById('activation-screen').style.display = 'flex';
       document.getElementById('expired-screen').style.display = 'none';
-      document.getElementById('topbar').style.display = 'none';
+document.getElementById('topbar').style.display = 'flex';
       document.getElementById('main-content').style.display = 'none';
       document.getElementById('bottom-nav').style.display = 'none';
       return;
@@ -21,7 +21,7 @@ const APP = {
     if (status === 'expired') {
       document.getElementById('activation-screen').style.display = 'none';
       document.getElementById('expired-screen').style.display = 'flex';
-      document.getElementById('topbar').style.display = 'none';
+document.getElementById('topbar').style.display = 'flex';
       document.getElementById('main-content').style.display = 'none';
       document.getElementById('bottom-nav').style.display = 'none';
       return;
@@ -61,12 +61,8 @@ const APP = {
     document.getElementById(`nav-${tab}`).classList.add('active');
 
     // Show topbar only on dashboard
-const topbar = document.getElementById('topbar');
-if (tab === 'dashboard') {
-  topbar.style.display = 'flex';
-} else {
-  topbar.style.display = 'none';
-}
+// Show topbar on all tabs
+document.getElementById('topbar').style.display = 'flex';
     // Refresh data per tab
     if (tab === 'dashboard') UI.renderDashboard();
     if (tab === 'sale') {

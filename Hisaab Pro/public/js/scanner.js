@@ -2,56 +2,57 @@
 const SCANNER = {
   running: false,
   mode: 'sale',
-  scanMode: 'barcode',
   cooldown: false,
   torchOn: false,
   torchTrack: null,
-  ocrInterval: null,
   onDetected: null,
 
   open(mode, onDetected) {
     this.mode = mode || 'sale';
     this.onDetected = onDetected;
     this.torchOn = false;
-    this.scanMode = 'barcode';
 
     const overlay = document.getElementById('scanner-overlay');
     overlay.style.display = 'flex';
 
-    // Show correct bottom view
+    const scannerBottom = document.getElementById('scanner-bottom');
+    const scannerTop = document.getElementById('scanner-top');
     const billView = document.getElementById('scanner-bill-view');
     const productView = document.getElementById('scanner-product-view');
 
     if (mode === 'sale') {
+      // Split screen — top 50% camera, bottom 50% bill
+      scannerTop.style.flex = '0 0 50%';
+      scannerBottom.style.display = 'flex';
       billView.style.display = 'flex';
       productView.style.display = 'none';
       this.renderScannerBill();
+      document.getElementById('scanner-mode-title').textContent = 'Scan to Add';
     } else {
+      // Full screen camera for product scan
+      scannerTop.style.flex = '1';
+      scannerBottom.style.display = 'flex';
       billView.style.display = 'none';
-      productView.style.display = 'flex';
-      // Clear form
-      document.getElementById('split-barcode').value = '';
-      document.getElementById('split-name').value = '';
-      document.getElementById('split-price').value = '';
-      document.getElementById('split-emoji').value = '';
+      productView.style.display = 'none';
+      // Show white empty bottom area
+      scannerBottom.style.background = '#fff';
+      scannerBottom.innerHTML = `
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:12px;">
+          <div style="font-size:40px;">📷</div>
+          <div style="font-size:14px;font-weight:700;color:#1E3A5F;text-align:center;">Point camera at barcode</div>
+          <div style="font-size:12px;color:#64748B;text-align:center;">Barcode will be captured automatically</div>
+        </div>`;
+      document.getElementById('scanner-mode-title').textContent = 'Scan Barcode';
     }
 
-    document.getElementById('last-scan-bar').style.display = 'none';
+    document.getElementById('last-scan-bar') && (document.getElementById('last-scan-bar').style.display = 'none');
     document.getElementById('torch-btn').classList.remove('active-torch');
-    this.updateScanModeUI('barcode');
-    this.startCamera();
+    this.startBarcodeScan();
   },
 
   close() {
     this.stopCamera();
-    this.stopOCR();
     document.getElementById('scanner-overlay').style.display = 'none';
-    document.getElementById('last-scan-bar').style.display = 'none';
-  },
-
-  async startCamera() {
-    document.getElementById('camera-status-text').textContent = 'Loading scanner…';
-    this.startBarcodeScan();
   },
 
   stopCamera() {
@@ -66,9 +67,8 @@ const SCANNER = {
     this.torchOn = false;
   },
 
-  // ── BARCODE ───────────────────────────────────────────────────────────────
+  // ── BARCODE SCANNING ─────────────────────────────────────────────────────
   startBarcodeScan() {
-    this.stopOCR();
     if (this.running) {
       try { Quagga.stop(); } catch(e) {}
       this.running = false;
@@ -88,24 +88,27 @@ const SCANNER = {
           }
         },
         decoder: {
-          readers: ['ean_reader','ean_8_reader','code_128_reader','code_39_reader','upc_reader','upc_e_reader']
+          readers: [
+            'ean_reader', 'ean_8_reader',
+            'code_128_reader', 'code_39_reader',
+            'upc_reader', 'upc_e_reader'
+          ]
         },
         locate: true
       }, (err) => {
         if (err) {
-          document.getElementById('camera-status-text').textContent = 'Scanner error — use manual entry';
+          document.getElementById('camera-status-text').textContent = 'Scanner error';
           return;
         }
         Quagga.start();
         this.running = true;
-        // Grab torch track
         try {
           const video = document.querySelector('#scanner-top video');
           if (video && video.srcObject) {
             this.torchTrack = video.srcObject.getVideoTracks()[0];
           }
         } catch(e) {}
-        document.getElementById('camera-status-text').textContent = '🟢 Barcode mode — hold barcode in frame';
+        document.getElementById('camera-status-text').textContent = '🟢 Hold barcode in frame';
       });
 
       Quagga.onDetected((result) => {
@@ -115,12 +118,13 @@ const SCANNER = {
         this.cooldown = true;
         setTimeout(() => { this.cooldown = false; }, 2000);
 
+        // Flash
         const flash = document.getElementById('scan-flash');
         flash.style.opacity = '0.4';
         setTimeout(() => { flash.style.opacity = '0'; }, 150);
         if (navigator.vibrate) navigator.vibrate(100);
 
-        if (this.onDetected) this.onDetected('barcode', barcode, null);
+        if (this.onDetected) this.onDetected(barcode);
       });
     };
 
@@ -137,140 +141,6 @@ const SCANNER = {
     }
   },
 
-  // ── OCR ───────────────────────────────────────────────────────────────────
-  startOCRScan() {
-    if (this.running) {
-      try { Quagga.stop(); } catch(e) {}
-      this.running = false;
-    }
-    this.stopOCR();
-    document.getElementById('camera-status-text').textContent = 'Loading OCR…';
-
-    const startOCR = () => {
-      document.getElementById('camera-status-text').textContent = '🔤 OCR mode — point at product name';
-
-      let video = document.getElementById('ocr-video');
-      if (!video) {
-        video = document.createElement('video');
-        video.id = 'ocr-video';
-        video.autoplay = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:1;';
-        document.getElementById('scanner-top').appendChild(video);
-      }
-
-      navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
-        audio: false
-      }).then(stream => {
-        video.srcObject = stream;
-        this.torchTrack = stream.getVideoTracks()[0];
-        this.ocrInterval = setInterval(() => { this.runOCR(video); }, 2500);
-      });
-    };
-
-    if (typeof Tesseract !== 'undefined') {
-      startOCR();
-    } else {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-      s.onload = () => startOCR();
-      s.onerror = () => {
-        document.getElementById('camera-status-text').textContent = 'OCR not available';
-        showToast('OCR not available', 'error');
-      };
-      document.head.appendChild(s);
-    }
-  },
-
-  async runOCR(video) {
-    if (this.cooldown) return;
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0);
-      document.getElementById('camera-status-text').textContent = '🔍 Reading text…';
-
-      const result = await Tesseract.recognize(canvas, 'eng', { logger: () => {} });
-      const text = result.data.text.trim();
-
-      if (!text || text.length < 2) {
-        document.getElementById('camera-status-text').textContent = '🔤 OCR mode — point at product name';
-        return;
-      }
-
-      document.getElementById('camera-status-text').textContent = `Detected: "${text.substring(0, 30)}"`;
-      if (this.cooldown) return;
-
-      // Search products by name match
-      const products = DB.getProducts();
-      const textLower = text.toLowerCase();
-      let bestMatch = null;
-      let bestScore = 0;
-
-      Object.entries(products).forEach(([bc, p]) => {
-        const words = p.name.toLowerCase().split(' ');
-        let score = 0;
-        words.forEach(word => { if (word.length > 2 && textLower.includes(word)) score++; });
-        if (score > bestScore) { bestScore = score; bestMatch = { barcode: bc, ...p }; }
-      });
-
-      this.cooldown = true;
-      setTimeout(() => { this.cooldown = false; }, 3000);
-
-      const flash = document.getElementById('scan-flash');
-      flash.style.opacity = '0.4';
-      setTimeout(() => { flash.style.opacity = '0'; }, 150);
-      if (navigator.vibrate) navigator.vibrate(100);
-
-      if (bestMatch && bestScore > 0) {
-        // Found product
-        if (this.onDetected) this.onDetected('ocr', bestMatch.barcode, bestMatch.name);
-      } else {
-        // No match — pass detected text for auto-fill
-        if (this.onDetected) this.onDetected('ocr-text', null, text);
-        document.getElementById('camera-status-text').textContent = '🔤 No match — text captured for form';
-      }
-    } catch(e) {
-      document.getElementById('camera-status-text').textContent = '🔤 OCR mode — point at product name';
-    }
-  },
-
-  stopOCR() {
-    if (this.ocrInterval) { clearInterval(this.ocrInterval); this.ocrInterval = null; }
-    const video = document.getElementById('ocr-video');
-    if (video) {
-      if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
-      video.remove();
-    }
-  },
-
-  setScanMode(mode) {
-    this.scanMode = mode;
-    this.updateScanModeUI(mode);
-    if (mode === 'barcode') this.startBarcodeScan();
-    else this.startOCRScan();
-  },
-
-  updateScanModeUI(mode) {
-    const barcodeBtn = document.getElementById('btn-mode-barcode');
-    const ocrBtn = document.getElementById('btn-mode-ocr');
-    if (!barcodeBtn || !ocrBtn) return;
-    if (mode === 'barcode') {
-      barcodeBtn.style.background = '#1E3A5F';
-      barcodeBtn.style.color = '#fff';
-      ocrBtn.style.background = 'rgba(255,255,255,0.15)';
-      ocrBtn.style.color = '#fff';
-    } else {
-      ocrBtn.style.background = '#2563EB';
-      ocrBtn.style.color = '#fff';
-      barcodeBtn.style.background = 'rgba(255,255,255,0.15)';
-      barcodeBtn.style.color = '#fff';
-    }
-  },
-
   async toggleTorch() {
     if (!this.torchTrack) { showToast('Torch not available', 'error'); return; }
     try {
@@ -278,7 +148,7 @@ const SCANNER = {
       await this.torchTrack.applyConstraints({ advanced: [{ torch: this.torchOn }] });
       document.getElementById('torch-btn').classList.toggle('active-torch', this.torchOn);
     } catch(e) {
-      showToast('Torch not supported', 'error');
+      showToast('Torch not supported on this device', 'error');
       this.torchOn = false;
     }
   },
@@ -299,12 +169,9 @@ const SCANNER = {
     }
 
     let total = 0;
-    let units = 0;
-
     list.innerHTML = bill.map(item => {
       const sub = item.price * item.qty;
       total += sub;
-      units += item.qty;
       return `
         <div style="display:flex;align-items:center;gap:8px;padding:10px;background:#F5F7FA;border:1px solid #E2E8F0;border-radius:10px;margin-bottom:6px;">
           <div style="font-size:18px;flex-shrink:0;">${item.emoji || '📦'}</div>
@@ -314,14 +181,14 @@ const SCANNER = {
           </div>
           <div style="display:flex;align-items:center;background:#fff;border:1.5px solid #E2E8F0;border-radius:8px;overflow:hidden;flex-shrink:0;">
             <button onclick="scannerChangQty('${escAttr(item.barcode)}', -1)"
-              style="width:28px;height:28px;background:transparent;border:none;color:#EF4444;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+              style="width:28px;height:28px;background:transparent;border:none;color:#EF4444;font-size:15px;font-weight:700;cursor:pointer;">−</button>
             <div style="min-width:24px;text-align:center;font-size:12px;font-weight:700;color:#1E3A5F;">${item.qty}</div>
             <button onclick="scannerChangQty('${escAttr(item.barcode)}', 1)"
-              style="width:28px;height:28px;background:transparent;border:none;color:#16A34A;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+              style="width:28px;height:28px;background:transparent;border:none;color:#16A34A;font-size:15px;font-weight:700;cursor:pointer;">+</button>
           </div>
           <div style="font-size:12px;font-weight:800;color:#1E3A5F;flex-shrink:0;min-width:56px;text-align:right;">Rs. ${sub.toLocaleString()}</div>
           <button onclick="scannerRemoveItem('${escAttr(item.barcode)}')"
-            style="width:24px;height:24px;background:transparent;border:none;color:#94A3B8;font-size:13px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;">✕</button>
+            style="width:24px;height:24px;background:transparent;border:none;color:#94A3B8;font-size:13px;cursor:pointer;flex-shrink:0;">✕</button>
         </div>`;
     }).join('');
 
@@ -331,6 +198,7 @@ const SCANNER = {
 
   showLastScan(name, price, found) {
     const bar = document.getElementById('last-scan-bar');
+    if (!bar) return;
     document.getElementById('lsb-emoji').textContent = found ? '✅' : '❌';
     document.getElementById('lsb-name').textContent = name;
     document.getElementById('lsb-price').textContent = found ? `Rs. ${Number(price).toLocaleString()}` : '';
@@ -343,63 +211,61 @@ const SCANNER = {
 
 // ── GLOBAL FUNCTIONS ──────────────────────────────────────────────────────
 function openScanner() {
-  SCANNER.open('sale', (type, barcode, detectedText) => {
-    if (type === 'barcode') {
-      const product = DB.getProduct(barcode);
-      if (product) {
-        DB.addToBill(barcode, product);
-        UI.renderBill();
-        SCANNER.renderScannerBill();
-        SCANNER.showLastScan(product.name, product.price, true);
-        showToast(`✓ ${product.name}`, 'success');
-      } else {
-        SCANNER.showLastScan(barcode, 0, false);
-        showToast('Product not found', 'error');
+  SCANNER.open('sale', (barcode) => {
+    const product = DB.getProduct(barcode);
+    if (product) {
+      const result = DB.addToBill(barcode, product);
+      if (!result.ok) {
+        SCANNER.showLastScan(product.name, product.price, false);
+        showToast(result.msg, 'error');
+        return;
       }
-    } else if (type === 'ocr') {
-      const product = DB.getProduct(barcode);
-      if (product) {
-        DB.addToBill(barcode, product);
-        UI.renderBill();
-        SCANNER.renderScannerBill();
-        SCANNER.showLastScan(product.name, product.price, true);
-        showToast(`✓ ${product.name}`, 'success');
-      }
+      UI.renderBill();
+      SCANNER.renderScannerBill();
+      SCANNER.showLastScan(product.name, product.price, true);
+      showToast(`✓ ${product.name}`, 'success');
+    } else {
+      SCANNER.showLastScan(barcode, 0, false);
+      showToast('Product not found', 'error');
     }
   });
 }
 
 function openProductScanner() {
-  SCANNER.open('product', (type, barcode, detectedText) => {
-    if (type === 'barcode') {
-      document.getElementById('split-barcode').value = barcode;
+  // Hide modal
+  document.getElementById('product-modal').style.display = 'none';
+
+  SCANNER.open('product', (barcode) => {
+    // Auto close and go back to modal
+    SCANNER.close();
+    document.getElementById('product-modal').style.display = 'flex';
+
+    // Fill barcode
+    document.getElementById('prod-barcode').value = barcode;
+
+    // Check if product already exists and pre-fill
+    const existing = DB.getProduct(barcode);
+    if (existing) {
+      document.getElementById('prod-name').value = existing.name;
+      document.getElementById('prod-price').value = existing.price;
+      const stockEl = document.getElementById('prod-stock');
+      if (stockEl) stockEl.value = existing.stock || 0;
+      showToast('Product found — edit if needed', 'success');
+    } else {
       showToast('Barcode captured ✓', 'success');
-    } else if (type === 'ocr') {
-      // Product found by OCR — auto fill all fields
-      const product = DB.getProduct(barcode);
-      if (product) {
-        document.getElementById('split-barcode').value = barcode;
-        document.getElementById('split-name').value = product.name;
-        document.getElementById('split-price').value = product.price;
-        showToast(`Found: ${product.name}`, 'success');
-      }
-    } else if (type === 'ocr-text') {
-      // No product match — auto fill name field with detected text
-      document.getElementById('split-name').value = detectedText || '';
-      showToast('Name auto-filled from OCR', 'success');
     }
   });
 }
 
 function closeScanner() { SCANNER.close(); }
 function toggleTorch() { SCANNER.toggleTorch(); }
-function setScanMode(mode) { SCANNER.setScanMode(mode); }
 
 function scannerChangQty(barcode, delta) {
   const bill = DB.getBill();
   const item = bill.find(i => i.barcode === barcode);
   if (!item) return;
-  DB.updateBillQty(barcode, item.qty + delta);
+  const result = DB.updateBillQty(barcode, item.qty + delta);
+  if (!result.ok) { showToast(result.msg, 'error'); return; }
   UI.renderBill();
   SCANNER.renderScannerBill();
 }
