@@ -1,7 +1,7 @@
 # Hisaab Pro 📦
 
 > **Smart Inventory & Billing App for Pakistani Shopkeepers**  
-> Built by [DevInfantary](https://github.com/DevInfantary) — Marching Innovation Forward
+> Built by [DevInfantary](https://devinfantary.com/) — Marching Innovation Forward
 
 ---
 
